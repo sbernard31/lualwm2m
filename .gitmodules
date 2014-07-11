@@ -1,0 +1,3 @@
+[submodule "liblwm2m"]
+	path = liblwm2m
+	url = git@github.com:sbernard31/liblwm2m.git

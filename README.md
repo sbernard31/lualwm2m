@@ -43,7 +43,7 @@ Compile & Test
 --------------
 Get the code : (*`--recursive` is need because of use of git submodule.*)
 ```
-git clone --recursive git@github.com:sbernard31/lualwm2m.git lualwm2m
+git clone --recursive https://github.com/sbernard31/lualwm2m.git lualwm2m
 ```
 
 

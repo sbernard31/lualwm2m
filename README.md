@@ -1,7 +1,7 @@
 lualwm2m
 =======
 
-**lualwm2m** is a Lua binding for client side [**liblwm2m/wakaama**](https://github.com/01org/liblwm2m) library .
+**lualwm2m** is a Lua binding for client side [**liblwm2m/wakaama**](https://github.com/eclipse/wakaama) library .
 
 
 A **lualwm2m** \ **luasocket** sample :

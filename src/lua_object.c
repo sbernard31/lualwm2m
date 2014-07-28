@@ -35,12 +35,12 @@ typedef struct luaobject_userdata {
 	int tableref;
 } luaobject_userdata;
 
-static uint8_t prv_gen_read(lua_State * L, char ** buffer, int * length,
+static uint8_t prv_gen_read(lua_State * L, lwm2m_tlv_t ** dataArrayP,
 		int instanceindex, bool modeAsArgument) {
 
 	// Default value for output parameters.
-	*buffer = NULL;
-	*length = 0;
+	(*dataArrayP)->value = NULL;
+	(*dataArrayP)->length = 0;
 
 	// If this is a function call it.
 	if (lua_isfunction(L, -1)) {
@@ -57,9 +57,9 @@ static uint8_t prv_gen_read(lua_State * L, char ** buffer, int * length,
 	if (lua_isnil(L, -1)) {
 		return COAP_404_NOT_FOUND ;
 	} else if (lua_isstring(L, -1)) {
-		*buffer = strdup(lua_tostring(L, -1)); // stack: ...
-		if (NULL != *buffer) {
-			*length = strlen(*buffer);
+		(*dataArrayP)->value = strdup(lua_tostring(L, -1)); // stack: ...
+		if (NULL != (*dataArrayP)->value) {
+			(*dataArrayP)->length = strlen((*dataArrayP)->value);
 			return COAP_205_CONTENT ;
 		}
 	}
@@ -67,8 +67,7 @@ static uint8_t prv_gen_read(lua_State * L, char ** buffer, int * length,
 
 }
 
-static uint8_t prv_read(lwm2m_uri_t * uriP, char ** buffer, int * length,
-		lwm2m_object_t * objectP) {
+static uint8_t prv_read(uint16_t instanceId, int * numDataP, lwm2m_tlv_t ** dataArrayP, lwm2m_object_t * objectP){
 	// Get user data.
 	luaobject_userdata * userdata = (luaobject_userdata*) objectP->userData;
 	lua_State * L = userdata->L;
@@ -76,46 +75,42 @@ static uint8_t prv_read(lwm2m_uri_t * uriP, char ** buffer, int * length,
 	// Get table of this object on the stack.
 	lua_rawgeti(L, LUA_REGISTRYINDEX, userdata->tableref); // stack: ..., objtable
 
-	if (LWM2M_URI_IS_SET_RESOURCE(uriP)) {
-		int instanceId;
-		if (!LWM2M_URI_IS_SET_INSTANCE(uriP))
-			instanceId = 0; // default value
+	if (instanceId == 0) {
 
 		// Get resource.
-		lua_pushinteger(L, uriP->resourceId); // stack: ..., objtable, resourceindex
+		lua_pushinteger(L, (*dataArrayP)->id); // stack: ..., objtable, resourceindex
 		lua_gettable(L, -2); // stack: ..., objtable, resourcevalue
 
 		// If this is a table try to get 'read' field.
 		if (lua_istable(L, -1)) {
 			lua_getfield(L, -1, "read"); // stack: ..., objtable, resourcevalue(table), readvalue
 			if (!lua_isnil(L, -1))
-				return prv_gen_read(L, buffer, length, -3, false);
+				return prv_gen_read(L, dataArrayP, -3, false);
 			else {
 				return COAP_405_METHOD_NOT_ALLOWED ;
 			}
 		}
 
 		// Manager other cases.
-		return prv_gen_read(L, buffer, length, -2, true);
+		return prv_gen_read(L, dataArrayP, -2, true);
 	} else {
-		// TODO: TLV or JSON not manage.
+		// TODO : manage multi-instance.
 		return COAP_501_NOT_IMPLEMENTED ;
 	}
 	return COAP_501_NOT_IMPLEMENTED ;
 }
 
-static uint8_t prv_gen_write(lua_State * L, char * buffer, int length,
-		int instanceindex, bool modeAsArgument) {
+static uint8_t prv_gen_write(lua_State * L, lwm2m_tlv_t * dataArray, int instanceindex, bool modeAsArgument) {
 
 	// If this is a function call it.
 	if (lua_isfunction(L, -1)) {
 		lua_pushvalue(L, instanceindex); // stack: ..., instance
 		if (modeAsArgument) {
 			lua_pushstring(L, "write"); // stack: ..., instance, mode
-			lua_pushlstring(L, buffer, length); // stack: ..., instance, mode, value
+			lua_pushlstring(L, dataArray->value, dataArray->length); // stack: ..., instance, mode, value
 			lua_call(L, 3, 0); // stack: ...
 		} else {
-			lua_pushlstring(L, buffer, length); // stack: ..., instance, value
+			lua_pushlstring(L, dataArray->value, dataArray->length); // stack: ..., instance, value
 			lua_call(L, 2, 0); // stack: ...
 		}
 		return COAP_204_CHANGED ;
@@ -124,8 +119,7 @@ static uint8_t prv_gen_write(lua_State * L, char * buffer, int length,
 	return COAP_405_METHOD_NOT_ALLOWED ;
 }
 
-static uint8_t prv_write(lwm2m_uri_t * uriP, char * buffer, int length,
-		lwm2m_object_t * objectP) {
+static uint8_t prv_write(uint16_t instanceId, int numData, lwm2m_tlv_t * dataArray, lwm2m_object_t * objectP){
 	// Get user data.
 	luaobject_userdata * userdata = (luaobject_userdata*) objectP->userData;
 	lua_State * L = userdata->L;
@@ -133,29 +127,26 @@ static uint8_t prv_write(lwm2m_uri_t * uriP, char * buffer, int length,
 	// Get table of this object on the stack.
 	lua_rawgeti(L, LUA_REGISTRYINDEX, userdata->tableref); // stack: ..., objtable
 
-	if (LWM2M_URI_IS_SET_RESOURCE(uriP)) {
-		int instanceId;
-		if (!LWM2M_URI_IS_SET_INSTANCE(uriP))
-			instanceId = 0; // default value
+	if (instanceId == 0) {
 
 		// Get resource.
-		lua_pushinteger(L, uriP->resourceId); // stack: ..., objtable, resourceindex
+		lua_pushinteger(L, dataArray->id); // stack: ..., objtable, resourceindex
 		lua_gettable(L, -2); // stack: ..., objtable, resourcevalue
 
 		// If this is a table try to get 'write' field.
 		if (lua_istable(L, -1)) {
 			lua_getfield(L, -1, "write"); // stack: ..., objtable, resourcevalue(table), writevalue
 			if (!lua_isnil(L, -1))
-				return prv_gen_write(L, buffer, length, -3, false);
+				return prv_gen_write(L, dataArray, -3, false);
 			else {
 				return COAP_405_METHOD_NOT_ALLOWED ;
 			}
 		}
 
 		// Manager other cases.
-		return prv_gen_write(L, buffer, length, -2, true);
+		return prv_gen_write(L, dataArray, -2, true);
 	} else {
-		// TODO: TLV or JSON not manage.
+		// TODO : manage multi-instance.
 		return COAP_501_NOT_IMPLEMENTED ;
 	}
 	return COAP_501_NOT_IMPLEMENTED ;
@@ -179,8 +170,7 @@ bool modeAsArgument) {
 	return COAP_405_METHOD_NOT_ALLOWED ;
 }
 
-static uint8_t prv_execute(lwm2m_uri_t * uriP, char * buffer, int length,
-		lwm2m_object_t * objectP) {
+static uint8_t prv_execute(uint16_t instanceId, uint16_t resourceId, char * buffer, int length, lwm2m_object_t * objectP) {
 
 	// Get user data.
 	luaobject_userdata * userdata = (luaobject_userdata*) objectP->userData;
@@ -189,13 +179,9 @@ static uint8_t prv_execute(lwm2m_uri_t * uriP, char * buffer, int length,
 	// Get table of this object on the stack.
 	lua_rawgeti(L, LUA_REGISTRYINDEX, userdata->tableref); // stack: ..., objtable
 
-	if (LWM2M_URI_IS_SET_RESOURCE(uriP)) {
-		int instanceId;
-		if (!LWM2M_URI_IS_SET_INSTANCE(uriP))
-			instanceId = 0; // default value
-
+	if (instanceId == 0) {
 		// Get resource.
-		lua_pushinteger(L, uriP->resourceId); // stack: ..., objtable, resourceindex
+		lua_pushinteger(L, resourceId); // stack: ..., objtable, resourceindex
 		lua_gettable(L, -2); // stack: ..., objtable, resourcevalue
 
 		// If this is a table, try to get 'execute' field.
@@ -211,14 +197,13 @@ static uint8_t prv_execute(lwm2m_uri_t * uriP, char * buffer, int length,
 		// Manager other cases.
 		return prv_gen_execute(L, -2, true);
 	} else {
-		// TODO: TLV or JSON not manage.
+		// TODO : manage multi-instance.
 		return COAP_501_NOT_IMPLEMENTED ;
 	}
 	return COAP_501_NOT_IMPLEMENTED ;
 }
 
-static uint8_t prv_create(lwm2m_uri_t * uriP, char * buffer, int length,
-		lwm2m_object_t * objectP) {
+static uint8_t prv_create(uint16_t instanceId, int numData, lwm2m_tlv_t * dataArray, lwm2m_object_t * objectP){
 	return COAP_501_NOT_IMPLEMENTED ;
 }
 

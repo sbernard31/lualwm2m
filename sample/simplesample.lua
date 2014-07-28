@@ -1,9 +1,17 @@
 local lwm2m = require 'lwm2m'
 local socket = require 'socket'
 
-local udp = socket.udp();
-udp:setsockname('*', 5682)
+-- Get script arguments.
+local args = {...}
+local serverip = args[1] or "127.0.0.1"
+local serverport = args[2] or 5683
+local deviceport = args[3] or 5682
 
+-- Create UDP socket.
+local udp = socket.udp();
+udp:setsockname('*', deviceport)
+
+-- Define a device object.
 local deviceObj = {
   id = 3,
   [0]  = "Open Mobile Alliance",                   -- manufacturer
@@ -13,12 +21,15 @@ local deviceObj = {
   [13] = {read = function() return os.time() end}, -- current time
 }
 
+-- Initialize lwm2m client.
 local ll = lwm2m.init("testlualwm2mclient", {deviceObj},
   function(data,host,port) udp:sendto(data,host,port) end)
 
-ll:addserver(123, "127.0.0.1", 5683)
+-- Add server and register to it.
+ll:addserver(123, serverip, serverport)
 ll:register()
 
+-- Communicate ...
 repeat
   ll:step()
   local data, ip, port, msg = udp:receivefrom()

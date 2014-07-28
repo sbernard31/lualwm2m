@@ -57,8 +57,11 @@ make
 
 Test it : (*Lua 5.1 and luasocket is needed.*)
 ```
-lua simplesample.lua
+lua simplesample.lua [serverip] [serverport] [deviceport]
 ```
+You can test it with [leshan](https://github.com/jvermillard/leshan).
+Go to http://54.228.25.31 and run `lua simplesample.lua 54.228.25.31`
+
 
 Limitation
 ----------

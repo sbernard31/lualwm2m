@@ -15,6 +15,9 @@ SET(SOURCES src/lua_liblwm2m.c src/lua_object.c)
 add_library(lwm2m MODULE ${SOURCES} ${CORE_SOURCES})
 SET_TARGET_PROPERTIES(lwm2m PROPERTIES PREFIX "")
 
+
+file(COPY src/lwm2mobject.lua DESTINATION "${CMAKE_BINARY_DIR}")
 file(COPY sample/simplesample.lua DESTINATION "${CMAKE_BINARY_DIR}")
 file(COPY sample/observesample.lua DESTINATION "${CMAKE_BINARY_DIR}")
 file(COPY sample/complexsample.lua DESTINATION "${CMAKE_BINARY_DIR}")
+file(COPY sample/dtlssample.lua DESTINATION "${CMAKE_BINARY_DIR}")

@@ -8,18 +8,18 @@ A **lualwm2m** \ **luasocket** sample :
 ``` lua
 local lwm2m = require 'lwm2m'
 local socket = require 'socket'
+local obj = require 'lwm2mobject'
 
 local udp = socket.udp();
 udp:setsockname('*', 5682)
 
-local deviceObj = {
-  id = 3,
+local deviceObj = obj.new(3, {
   [0]  = "Open Mobile Alliance",                   -- manufacturer
   [1]  = "Lightweight M2M Client",                 -- model number
   [2]  = "345000123",                              -- serial number
   [3]  = "1.0",                                    -- firmware version
   [13] = {read = function() return os.time() end}, -- current time
-}
+})
 
 local ll = lwm2m.init("testlualwm2mclient", {deviceObj},
   function(data,host,port) udp:sendto(data,host,port) end)
@@ -67,8 +67,3 @@ Limitation
 ----------
 **lualwm2m** binding is still in development, multiinstance is not supported.
 For now, it is only compatible with Lua 5.1 and linux.
-
-Syntax Idea
------------
-The [idea.lua](https://github.com/sbernard31/lualwm2m/blob/master/sample/idea.lua) file contain syntax thought.
-Do not hesitate to propose more syntax.

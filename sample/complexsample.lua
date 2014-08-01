@@ -1,4 +1,5 @@
 local lwm2m = require 'lwm2m'
+local obj = require 'lwm2mobject' 
 local socket = require 'socket'
 
 -- Get script arguments.
@@ -12,18 +13,16 @@ local udp = socket.udp();
 udp:setsockname('*', deviceport)
 
 -- Define a sample object.
-local sampleObj = {
-  id = 3,
+local sampleObj = obj.new(3, {
   -- READ
   [0]  = "Res0 : Read only",
-  [1]  = {read = "Res1 : Read only"},
-  [2]  = {read = function (obj) return "Res2: Read only" end},
+  [1]  = {read = function (instance) return "Res2: Read only" end},
   
   -- EXECUTE
-  [4]  = {execute = function (obj) print ("Res4: execute !") end},
+  [4]  = {execute = function (instance) print ("Res4: execute !") end},
 
   -- READ/WRITE/EXECUTE
-  [13]  = function (obj, mode, value)
+  [13]  = function (instance, mode, value)
     if mode == "read" then
       return "Res13: Read/Write/Execute, mode=" .. mode
     elseif mode == "write" then
@@ -34,20 +33,19 @@ local sampleObj = {
   end,
 
   -- READ/WRITE
-  [14]  = {write = function (obj, value) print ("Res14: Write only:",value) end},
+  [14]  = {write = function (instance,value) print ("Res14: Write only:",value) end},
   [15] = {
-    value = "Res15: defaultvalue",
-    read  = function (obj)
-      local val = obj[15].value
+    read  = function (instance)
+      local val = instance[15] or "Res15: defaultvalue"
       print (val); return val;
     end,
-    write = function (obj, value)
+    write = function (instance, value)
       print("Res15 modification")
-      print("before :", obj[15].value," after:",value)
-      obj[15].value = value
+      print("before :", instance[15]," after:",value)
+      instance[15] = value
     end
   }
-}
+})
 
 -- Initialize lwm2m client.
 local ll = lwm2m.init("testlualwm2mclient", {sampleObj},

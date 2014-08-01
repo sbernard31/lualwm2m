@@ -1,5 +1,6 @@
 local lwm2m = require 'lwm2m'
 local socket = require 'socket'
+local obj = require 'lwm2mobject'
 
 -- Get script arguments.
 local args = {...}
@@ -12,14 +13,13 @@ local udp = socket.udp();
 udp:setsockname('*', deviceport)
 
 -- Define a device object.
-local deviceObj = {
-  id = 3,
+local deviceObj = obj.new(3, {
   [0]  = "Open Mobile Alliance",                   -- manufacturer
   [1]  = "Lightweight M2M Client",                 -- model number
   [2]  = "345000123",                              -- serial number
   [3]  = "1.0",                                    -- firmware version
   [13] = {read = function() return os.time() end}, -- current time
-}
+})
 
 -- Initialize lwm2m client.
 local ll = lwm2m.init("testlualwm2mclient", {deviceObj},

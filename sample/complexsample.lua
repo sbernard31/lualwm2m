@@ -22,7 +22,7 @@ local sampleObj = obj.new(3, {
   [4]  = {execute = function (instance) print ("Res4: execute !") end},
 
   -- READ/WRITE/EXECUTE
-  [13]  = function (instance, mode, value)
+  [13] = function (instance, mode, value)
     if mode == "read" then
       return "Res13: Read/Write/Execute, mode=" .. mode
     elseif mode == "write" then
@@ -33,7 +33,7 @@ local sampleObj = obj.new(3, {
   end,
 
   -- READ/WRITE
-  [14]  = {write = function (instance,value) print ("Res14: Write only:",value) end},
+  [14] = {read = "default value", write = true},
   [15] = {
     read  = function (instance)
       local val = instance[15] or "Res15: defaultvalue"

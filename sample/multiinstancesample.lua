@@ -14,8 +14,8 @@ udp:setsockname('*', deviceport)
 
 -- Define an custom object to manage temperature in rooms.
 local rooms = obj.new(21, {
-  [0]  = function () return math.random(16,30)end  ,  -- Current Temperature
-  [1]  = {read = true, write=true},                   -- Temperature set-point
+  [0]  = {read = function () return math.random(16,30) end},  -- Current Temperature
+  [1]  = {read = true, write=true},                           -- Temperature set-point
 },true)
 
 -- Create instances.

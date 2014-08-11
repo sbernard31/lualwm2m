@@ -33,8 +33,10 @@ local function read (instance, resourceid)
   elseif optype == "table" then
     if type(op.read) == "function" then
       return M.CONTENT, op.read(instance)
-    elseif type(op.read) == "boolean" then
+    elseif type(op.read) == "boolean" and op.read then
       return M.CONTENT, instance[resourceid]
+    elseif type(op.read) == "string" then
+      return M.CONTENT, instance[resourceid] or op.read
     end
   end
 
@@ -56,7 +58,7 @@ local function write (instance, resourceid, value)
   elseif optype == "table" then
     if type(op.write) == "function" then
       return M.CHANGED, op.write(instance,value)
-    elseif type(op.read) == "boolean" then
+    elseif type(op.write) == "boolean" and op.write then
       instance[resourceid]  = value
       return M.CHANGED
     end

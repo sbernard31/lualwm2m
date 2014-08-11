@@ -27,7 +27,7 @@ livingroom[1] = 18;   -- livingroom temperature set point
 
 
 -- Initialize lwm2m client.
-local ll = lwm2m.init("testlualwm2mclient", {rooms},
+local ll = lwm2m.init("lua-multi-instance-client", {rooms},
   function(data,host,port) udp:sendto(data,host,port) end)
 
 -- Add server and register to it.

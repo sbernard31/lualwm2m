@@ -22,7 +22,7 @@ local deviceObj = obj.new(3, {
 })
 
 -- Initialize lwm2m client.
-local ll = lwm2m.init("testlualwm2mclient", {deviceObj},
+local ll = lwm2m.init("lua-client", {deviceObj},
   function(data,host,port) udp:sendto(data,host,port) end)
 
 -- Add server and register to it.

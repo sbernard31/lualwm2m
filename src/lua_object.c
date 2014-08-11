@@ -121,63 +121,57 @@ static uint8_t prv_read(uint16_t instanceId, int * numDataP,
 	if (!res)
 		return COAP_500_INTERNAL_SERVER_ERROR ;
 
-	if (instanceId == 0) {
-		if ((*numDataP) == 0) {
-			// Push resourceId list on the stack
-			int res = prv_get_resourceId_list(L); // stack : ..., instance, resourceList
-			if (!res) {
-				lua_pop(L, 1);
-				return COAP_500_INTERNAL_SERVER_ERROR ;
-			}
-
-			// Get number of resource
-			size_t nbRes = lua_objlen(L, -1);
-
-			// Create temporary structure
-			lwm2m_tlv_t tmpDataArray[nbRes];
-			memset(tmpDataArray, 0, nbRes * sizeof(lwm2m_tlv_t));
-
-			// Iterate through all items of the resourceId list
-			int i = 0;
-			lua_pushnil(L); // stack: ..., instance, resourceList, key(nil)
-			while (lua_next(L, -2) != 0) { // stack: ...,instance , resourceList, key, value
-				if (lua_isnumber(L, -1)) {
-					int resourceid = lua_tonumber(L, -1);
-					lua_pushvalue(L, -4); // stack: ...,instance , resourceList, key, value, instance
-					int res = prv_read_resource(L, resourceid,
-							&tmpDataArray[i]);
-					if (res <= COAP_205_CONTENT)
-						i++;
-					lua_pop(L, 1); // stack: ...,instance , resourceList, key, value
-				}
-				// Removes 'value'; keeps 'key' for next iteration
-				lua_pop(L, 1); // stack: ...,instance , resourceList, key
-			}
-			// Clean the stack
-			lua_pop(L, 2);
-
-			// Allocate memory for this resource
-			*dataArrayP = lwm2m_tlv_new(i);
-			if (*dataArrayP == NULL)
-				return COAP_500_INTERNAL_SERVER_ERROR ;
-
-			// Copy data in output parameter
-			(*numDataP) = i;
-			memcpy(*dataArrayP, tmpDataArray, sizeof(lwm2m_tlv_t) * i);
-
-			return COAP_205_CONTENT ;
-		} else {
-			// Get resource.
-			(*numDataP) = 1;
-			int ret = prv_read_resource(L, (*dataArrayP)->id, (*dataArrayP));
+	if ((*numDataP) == 0) {
+		// Push resourceId list on the stack
+		int res = prv_get_resourceId_list(L); // stack : ..., instance, resourceList
+		if (!res) {
 			lua_pop(L, 1);
-			return ret;
+			return COAP_500_INTERNAL_SERVER_ERROR ;
 		}
+
+		// Get number of resource
+		size_t nbRes = lua_objlen(L, -1);
+
+		// Create temporary structure
+		lwm2m_tlv_t tmpDataArray[nbRes];
+		memset(tmpDataArray, 0, nbRes * sizeof(lwm2m_tlv_t));
+
+		// Iterate through all items of the resourceId list
+		int i = 0;
+		lua_pushnil(L); // stack: ..., instance, resourceList, key(nil)
+		while (lua_next(L, -2) != 0) { // stack: ...,instance , resourceList, key, value
+			if (lua_isnumber(L, -1)) {
+				int resourceid = lua_tonumber(L, -1);
+				lua_pushvalue(L, -4); // stack: ...,instance , resourceList, key, value, instance
+				int res = prv_read_resource(L, resourceid, &tmpDataArray[i]);
+				if (res <= COAP_205_CONTENT)
+					i++;
+				lua_pop(L, 1); // stack: ...,instance , resourceList, key, value
+			}
+			// Removes 'value'; keeps 'key' for next iteration
+			lua_pop(L, 1); // stack: ...,instance , resourceList, key
+		}
+		// Clean the stack
+		lua_pop(L, 2);
+
+		// Allocate memory for this resource
+		*dataArrayP = lwm2m_tlv_new(i);
+		if (*dataArrayP == NULL)
+			return COAP_500_INTERNAL_SERVER_ERROR ;
+
+		// Copy data in output parameter
+		(*numDataP) = i;
+		memcpy(*dataArrayP, tmpDataArray, sizeof(lwm2m_tlv_t) * i);
+
+		return COAP_205_CONTENT ;
 	} else {
-		// TODO : manage multi-instance.
+		// Get resource.
+		(*numDataP) = 1;
+		int ret = prv_read_resource(L, (*dataArrayP)->id, (*dataArrayP));
 		lua_pop(L, 1);
-		return COAP_501_NOT_IMPLEMENTED ;
+		return ret;
 	}
+
 	lua_pop(L, 1);
 	return COAP_501_NOT_IMPLEMENTED ;
 }
@@ -219,23 +213,14 @@ static uint8_t prv_write(uint16_t instanceId, int numData,
 		return COAP_500_INTERNAL_SERVER_ERROR ;
 
 	// write resource
-	if (instanceId == 0) {
-		int i = 0;
-		int result;
-		do {
-			result = prv_write_resource(userdata->L, dataArray[i].id,
-					dataArray[i]);
-			i++;
-		} while (i < numData && result == COAP_204_CHANGED );
-		lua_pop(L, 1);
-		return result;
-	} else {
-		// TODO : manage multi-instance.
-		lua_pop(L, 1);
-		return COAP_501_NOT_IMPLEMENTED ;
-	}
+	int i = 0;
+	int result;
+	do {
+		result = prv_write_resource(userdata->L, dataArray[i].id, dataArray[i]);
+		i++;
+	} while (i < numData && result == COAP_204_CHANGED );
 	lua_pop(L, 1);
-	return COAP_501_NOT_IMPLEMENTED ;
+	return result;
 }
 
 static uint8_t prv_execute_resource(lua_State * L, uint16_t resourceid) {
@@ -326,10 +311,12 @@ lwm2m_object_t * get_lua_object(lua_State *L, int tableindex, int objId) {
 			return NULL;
 		}
 
-		userdata->L = L;
-		lua_pushvalue(L, tableindex); // stack: ..., table
+		// store table represent this object
+		lua_pushvalue(L, tableindex); // stack: ..., objectTable
 		userdata->tableref = luaL_ref(L, LUA_REGISTRYINDEX); //stack: ...
 
+		// set fields
+		userdata->L = L;
 		objectP->objID = objId;
 		objectP->readFunc = prv_read;
 		objectP->writeFunc = prv_write;
@@ -338,6 +325,30 @@ lwm2m_object_t * get_lua_object(lua_State *L, int tableindex, int objId) {
 		objectP->deleteFunc = prv_delete;
 		objectP->closeFunc = prv_close;
 		objectP->userData = userdata;
+
+		// Update instance List
+		// ---------------------
+		// Get table of this object on the stack.
+		lua_rawgeti(L, LUA_REGISTRYINDEX, userdata->tableref); // stack: ..., objectTable
+		int i = 0;
+		lua_pushnil(L); // stack: ..., objectTable, key(nil)
+		while (lua_next(L, -2) != 0) { // stack: ..., objectTable, key, value
+			if (lua_isnumber(L, -2)) {
+				int instanceid = lua_tonumber(L, -2);
+				lwm2m_list_t * instance = malloc(sizeof(lwm2m_list_t));
+				if (NULL == instance)
+					return NULL;
+				memset(instance, 0, sizeof(lwm2m_list_t));
+				instance->id = instanceid;
+				objectP->instanceList = LWM2M_LIST_ADD(objectP->instanceList,
+						instance);
+			}
+			// Removes 'value'; keeps 'key' for next iteration
+			lua_pop(L, 1); // stack: ..., objectTable, key
+		}
+		// Clean the stack
+		lua_pop(L, 1);
+
 	}
 
 	return objectP;

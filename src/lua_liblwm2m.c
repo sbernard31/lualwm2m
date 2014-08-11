@@ -149,7 +149,7 @@ static int llwm_init(lua_State *L) {
 				free(objArray[i - 1]);
 			}
 			return luaL_error(L,
-					"unable to create objects (Memory allocation problem ?)");
+					"unable to create objects (Bad object structure or memory allocation problem ?)");
 		}
 		objArray[i - 1] = obj;
 		lua_pop(L, 1); // stack: lwu, tableobj
@@ -287,7 +287,8 @@ static int llwm_resource_changed(lua_State *L) {
 
 static int llwm_close(lua_State *L) {
 	// Get llwm userdata
-	llwm_userdata *lwu = checkllwm(L, "close");
+	llwm_userdata* lwu = (llwm_userdata*) luaL_checkudata(L, 1,
+				"lualwm2m.llwm");
 
 	// Close lwm2m context.
 	if (lwu->ctx) {

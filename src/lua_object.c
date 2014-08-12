@@ -119,7 +119,7 @@ static uint8_t prv_read(uint16_t instanceId, int * numDataP,
 	// Push instance on the stack
 	int res = prv_get_instance(L, userdata, instanceId); // stack: ..., instance
 	if (!res)
-		return COAP_500_INTERNAL_SERVER_ERROR ;
+		return COAP_404_NOT_FOUND ;
 
 	if ((*numDataP) == 0) {
 		// Push resourceId list on the stack
@@ -250,7 +250,7 @@ static uint8_t prv_execute(uint16_t instanceId, uint16_t resourceId,
 	luaobject_userdata * userdata = (luaobject_userdata*) objectP->userData;
 	lua_State * L = userdata->L;
 
-	//push instance on the stack
+	// Push instance on the stack
 	int res = prv_get_instance(L, userdata, instanceId);
 	if (!res)
 		return COAP_500_INTERNAL_SERVER_ERROR ;
@@ -275,7 +275,32 @@ static uint8_t prv_create(uint16_t instanceId, int numData,
 }
 
 static uint8_t prv_delete(uint16_t id, lwm2m_object_t * objectP) {
-	return COAP_501_NOT_IMPLEMENTED ;
+	// Remove instance in C list
+	lwm2m_list_t * deletedInstance;
+	objectP->instanceList = lwm2m_list_remove(objectP->instanceList, id,
+			(lwm2m_list_t **) &deletedInstance);
+	if (NULL == deletedInstance)
+		return COAP_404_NOT_FOUND ;
+
+	free(deletedInstance);
+
+	// Get user data.
+	luaobject_userdata * userdata = (luaobject_userdata*) objectP->userData;
+	lua_State * L = userdata->L;
+
+	// Get table of this object on the stack.
+	lua_rawgeti(L, LUA_REGISTRYINDEX, userdata->tableref); // stack: ..., object
+	if (!lua_istable(L, -1)) {
+		lua_pop(L, 1);
+		return 0;
+	}
+	// Remove Instance in lua
+	lua_pushnumber(L, id); // stack: ..., object, instanceId
+	lua_pushnil(L);        // stack: ..., object, instanceId, nil
+	lua_rawset(L, -3);     // stack: ..., object
+	lua_pop(L,1);
+
+	return COAP_202_DELETED ;
 }
 
 static void prv_close(lwm2m_object_t * objectP) {

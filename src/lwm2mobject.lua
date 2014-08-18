@@ -88,6 +88,27 @@ local function execute (instance, resourceid)
   return M.METHOD_NOT_ALLOWED
 end
 
+-- LWM2M delete operation
+local function delete (instance)
+  local _mt = getmetatable(instance)
+  local obj = _mt.object
+
+  if type(instance.delete) == "boolean" and instance.delete then
+    obj[instance.id]  = nil
+    return M.CHANGED
+  end
+  
+  -- if no delete information for this object
+  -- default behavior is to : 
+  -- delete is llowed for multiinstance and forbidden for single one.
+  if obj.multi then
+    obj[instance.id] = nil
+    return M.DELETED
+  else
+    return M.METHOD_NOT_ALLOWED
+  end
+end
+
 -- list all available resources
 local function list (instance)
   local _mt = getmetatable(instance)
@@ -113,7 +134,7 @@ function M.new(id, operations, multi)
       obj[id] = instance
       setmetatable(instance,{
         object     = obj,
-        __index    = {read = read, write = write, execute = execute, list = list},
+        __index    = {read = read, write = write, execute = execute, list = list, delete = delete},
       })
       return instance
     end,

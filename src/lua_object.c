@@ -283,19 +283,28 @@ static uint8_t prv_delete(uint16_t id, lwm2m_object_t * objectP) {
 	luaobject_userdata * userdata = (luaobject_userdata*) objectP->userData;
 	lua_State * L = userdata->L;
 
-	// Get table of this object on the stack.
-	lua_rawgeti(L, LUA_REGISTRYINDEX, userdata->tableref); // stack: ..., object
-	if (!lua_istable(L, -1)) {
-		lua_pop(L, 1);
-		return COAP_500_INTERNAL_SERVER_ERROR;
-	}
-	// Remove Instance in lua
-	lua_pushnumber(L, id); // stack: ..., object, instanceId
-	lua_pushnil(L);        // stack: ..., object, instanceId, nil
-	lua_rawset(L, -3);     // stack: ..., object
-	lua_pop(L, 1);
+	// Push instance on the stack
+	int res = prv_get_instance(L, userdata, id); // stack: ..., instance
+	if (!res)
+		return COAP_500_INTERNAL_SERVER_ERROR ;
 
-	return COAP_202_DELETED ;
+	// Get the delete function
+	lua_getfield(L, -1, "delete"); // stack: ..., instance, deleteFunc
+	if (!lua_isfunction(L, -1)) {
+		lua_pop(L, 1); // clean the stack
+		return COAP_500_INTERNAL_SERVER_ERROR ;
+	}
+
+	// Push instance and resource id on the stack and call the writeFunc
+	lua_pushvalue(L, -2);  // stack: ..., instance, deleteFunc, instance
+	lua_call(L, 1, 1); // stack: ..., instance, return_code
+
+	// Get return code
+	int ret = lua_tointeger(L, -1);
+
+	// Clean the stack
+	lua_pop(L, 2);
+	return ret;
 }
 
 static uint8_t prv_create(uint16_t instanceId, int numData,

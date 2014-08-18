@@ -116,11 +116,20 @@ function M.new(id, operations, multi)
         __index    = {read = read, write = write, execute = execute, list = list},
       })
       return instance
+    end,
+    multi = multi,
+    create = function (obj,id)
+      if multi and not obj[id] then
+        local instance = obj:newinstance(id)
+        return M.CREATED, instance 
+      else
+        return M.METHOD_NOT_ALLOWED
+      end
     end
   }
-  
+
   if not multi then
-    object:newinstance(0);
+    object:newinstance(0)
   end
 
   return object

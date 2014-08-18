@@ -269,11 +269,6 @@ static uint8_t prv_execute(uint16_t instanceId, uint16_t resourceId,
 	return COAP_501_NOT_IMPLEMENTED ;
 }
 
-static uint8_t prv_create(uint16_t instanceId, int numData,
-		lwm2m_tlv_t * dataArray, lwm2m_object_t * objectP) {
-	return COAP_501_NOT_IMPLEMENTED ;
-}
-
 static uint8_t prv_delete(uint16_t id, lwm2m_object_t * objectP) {
 	// Remove instance in C list
 	lwm2m_list_t * deletedInstance;
@@ -292,15 +287,60 @@ static uint8_t prv_delete(uint16_t id, lwm2m_object_t * objectP) {
 	lua_rawgeti(L, LUA_REGISTRYINDEX, userdata->tableref); // stack: ..., object
 	if (!lua_istable(L, -1)) {
 		lua_pop(L, 1);
-		return 0;
+		return COAP_500_INTERNAL_SERVER_ERROR;
 	}
 	// Remove Instance in lua
 	lua_pushnumber(L, id); // stack: ..., object, instanceId
 	lua_pushnil(L);        // stack: ..., object, instanceId, nil
 	lua_rawset(L, -3);     // stack: ..., object
-	lua_pop(L,1);
+	lua_pop(L, 1);
 
 	return COAP_202_DELETED ;
+}
+
+static uint8_t prv_create(uint16_t instanceId, int numData,
+		lwm2m_tlv_t * dataArray, lwm2m_object_t * objectP) {
+	// Get user data.
+	luaobject_userdata * userdata = (luaobject_userdata*) objectP->userData;
+	lua_State * L = userdata->L;
+
+	// Get table of this object on the stack.
+	lua_rawgeti(L, LUA_REGISTRYINDEX, userdata->tableref); // stack: ..., object
+
+	// Get the create function
+	lua_getfield(L, -1, "create"); // stack: ..., object, createFunc
+	if (!lua_isfunction(L, -1)) {
+		lua_pop(L, 1); // clean the stack
+		return COAP_500_INTERNAL_SERVER_ERROR ;
+	}
+
+	// Create instance in C list
+	lwm2m_list_t * instance = malloc(sizeof(lwm2m_list_t));
+	if (NULL == instance)
+		return COAP_500_INTERNAL_SERVER_ERROR;
+	memset(instance, 0, sizeof(lwm2m_list_t));
+	instance->id = instanceId;
+	objectP->instanceList = LWM2M_LIST_ADD(objectP->instanceList, instance)
+
+
+	// Push object and instance id on the stack and call the create function
+	lua_pushvalue(L, -2);  // stack: ..., object, createFunc, object
+	lua_pushinteger(L, instanceId); // stack: ..., object, createFunc, object, instanceId
+	lua_call(L, 2, 2); // stack: ..., object, return_code, instance
+
+	// Get return code
+	int ret = lua_tointeger(L, -2);
+	if (ret == COAP_201_CREATED) {
+		// write value
+		ret = prv_write(instanceId, numData, dataArray, objectP);
+		if (ret == COAP_204_CHANGED) {
+			return COAP_201_CREATED ;
+		} else {
+			prv_delete(instanceId, objectP);
+			return ret;
+		}
+	}
+	return ret;
 }
 
 static void prv_close(lwm2m_object_t * objectP) {

@@ -35,7 +35,7 @@ local function read (instance, resourceid)
       return M.CONTENT, op.read(instance)
     elseif type(op.read) == "boolean" and op.read then
       return M.CONTENT, instance[resourceid]
-    elseif type(op.read) == "string" then
+    elseif type(op.read) == "string" or type(op.read) == "number" then
       return M.CONTENT, instance[resourceid] or op.read
     end
   end

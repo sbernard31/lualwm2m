@@ -95,7 +95,7 @@ local function delete (instance)
 
   if type(instance.delete) == "boolean" and instance.delete then
     obj[instance.id]  = nil
-    return M.CHANGED
+    return M.DELETED
   end
   
   -- if no delete information for this object

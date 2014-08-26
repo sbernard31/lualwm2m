@@ -176,6 +176,37 @@ static int llwm_add_server(lua_State *L) {
 	char* host = luaL_checkstring(L, 3);
 	int port = luaL_checkint(L, 4);
 
+	// Get lifetime for registration
+	int lifetime = luaL_checkint(L, 5);
+
+	// SMS number of NULL
+	char * sms = luaL_checkstring(L, 6);
+
+	// on empty string the SMS number is null
+	if (strlen(sms) <= 0) {
+		sms = NULL;
+	}
+	// binding mode
+	char * strBinding = luaL_checkstring(L, 7);
+	lwm2m_binding_t binding = BINDING_UNKNOWN;
+
+	if (strcmp(strBinding,"U") == 0) {
+		binding = BINDING_U;
+	} else if (strcmp(strBinding,"UQ") == 0) {
+		binding = BINDING_UQ;
+	} else if (strcmp(strBinding,"S") == 0) {
+		binding = BINDING_S;
+	} else if (strcmp(strBinding,"SQ") == 0) {
+		binding = BINDING_SQ;
+	} else if (strcmp(strBinding,"US") == 0) {
+		binding = BINDING_US;
+	} else if (strcmp(strBinding,"UQS") == 0) {
+		binding = BINDING_UQS;
+	} else {
+		return luaL_error(L,
+			"unknown binding mode");
+	}
+
 	// Create struct to store it.
 	size_t lal = sizeof(struct llwm_addr_t);
 	struct llwm_addr_t * la = malloc(lal);
@@ -189,7 +220,7 @@ static int llwm_add_server(lua_State *L) {
 	memset(&security, 0, sizeof(lwm2m_security_t));
 
 	// Add server to context.
-	int error = lwm2m_add_server(lwu->ctx, shortID, la, &security);
+	int error = lwm2m_add_server(lwu->ctx, shortID, lifetime, sms, binding, la, &security);
 
 	// Free adress struct memory.
 	//free(la->host); // TODO we cannot free it because it is already used, problem this will never be free...

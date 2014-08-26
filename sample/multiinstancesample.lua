@@ -31,7 +31,7 @@ local ll = lwm2m.init("lua-multi-instance-client", {rooms},
   function(data,host,port) udp:sendto(data,host,port) end)
 
 -- Add server and register to it.
-ll:addserver(123, serverip, serverport)
+ll:addserver(123, serverip, serverport,86400,"","U")
 ll:register()
 
 -- Communicate ...

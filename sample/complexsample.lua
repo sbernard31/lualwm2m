@@ -52,7 +52,10 @@ local ll = lwm2m.init("lua-complex-client", {sampleObj},
   function(data,host,port) udp:sendto(data,host,port) end)
 
 -- Add server and register to it.
-ll:addserver(123, serverip, serverport, 86400, "", "U")
+local lifetime = 86400  -- Lifetime of the registration in sec or 0 if default value (86400 sec)
+local sms = ""          -- SMS MSISDN (phone number) for this server to send SMS
+local binding = "U"     -- Client connection mode with this server 
+ll:addserver(123, serverip, serverport, lifetime, sms, binding)
 ll:register()
 
 -- Communicate ...

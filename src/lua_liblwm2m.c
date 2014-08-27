@@ -177,17 +177,17 @@ static int llwm_add_server(lua_State *L) {
 	int port = luaL_checkint(L, 4);
 
 	// Get lifetime for registration
-	int lifetime = luaL_checkint(L, 5);
+	int lifetime = luaL_optint(L, 5, 0);
 
 	// SMS number of NULL
-	char * sms = luaL_checkstring(L, 6);
+	char * sms = luaL_optstring(L, 6, "");
 
 	// on empty string the SMS number is null
 	if (strlen(sms) <= 0) {
 		sms = NULL;
 	}
 	// binding mode
-	char * strBinding = luaL_checkstring(L, 7);
+	char * strBinding = luaL_optstring(L, 7, "U");
 	lwm2m_binding_t binding = BINDING_UNKNOWN;
 
 	if (strcmp(strBinding,"U") == 0) {

@@ -62,6 +62,8 @@ lua simplesample.lua [serverip] [serverport] [deviceport]
 You can test it with [leshan](https://github.com/jvermillard/leshan).
 Go to http://54.228.25.31 and run `lua simplesample.lua 54.228.25.31`
 
+If you don't want to compile it and you're familiar with [docker](https://www.docker.com/), you could try this [docker container](https://github.com/jvermillard/containers/tree/master/lualwm2m).
+
 
 Limitation
 ----------

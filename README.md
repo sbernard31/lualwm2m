@@ -47,7 +47,7 @@ git clone --recursive https://github.com/sbernard31/lualwm2m.git lualwm2m
 ```
 
 
-Compile it :
+Compile it : (You need lua header files from package `liblua5.1-0-dev`)
 ```
 mkdir [builddir]
 cd [builddir]
@@ -65,5 +65,5 @@ Go to http://54.228.25.31 and run `lua simplesample.lua 54.228.25.31`
 
 Limitation
 ----------
-**lualwm2m** binding is still in development, multiinstance is not supported.
+**lualwm2m** binding is still in development.
 For now, it is only compatible with Lua 5.1 and linux.

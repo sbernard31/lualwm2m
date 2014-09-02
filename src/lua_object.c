@@ -101,8 +101,23 @@ static uint8_t prv_read_resource(lua_State * L, uint16_t resourceid,
 	// Get return code
 	int ret = lua_tointeger(L, -2);
 	if (ret == COAP_205_CONTENT) {
-		tlvP->id = resourceid;
-		tlvP->value = strdup(lua_tolstring(L, -1, &tlvP->length));
+		if (lua_isnil(L,-1))
+		{
+			tlvP->id = resourceid;
+			tlvP->value = NULL;
+			tlvP->length = 0;
+		}else if (lua_isstring(L,-1))
+		{
+			tlvP->id = resourceid;
+			tlvP->value = strdup(lua_tolstring(L, -1, &tlvP->length));
+			if (tlvP->value == NULL){
+				// manage memory allocation error
+				ret = COAP_500_INTERNAL_SERVER_ERROR;
+			}
+		}else{
+			// other type is not managed for now.
+			ret =  COAP_501_NOT_IMPLEMENTED;
+		}
 	}
 	// clean the stack
 	lua_pop(L, 2);

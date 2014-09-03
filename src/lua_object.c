@@ -82,6 +82,87 @@ static int prv_get_resourceId_list(lua_State * L) {
 	return 1;
 }
 
+// Convert the resource from the top of the stack in tlvP
+// return 0 (COAP_NO_ERROR) if ok or COAP error if an error occurred (see liblwm2m.h)
+static int prv_luaToResourceTLV(lua_State * L, uint16_t resourceid,
+		lwm2m_tlv_t * tlvP, lwm2m_tlv_type_t type) {
+	int value_type = lua_type(L, -1);
+	switch (value_type) {
+	case LUA_TNIL:
+		tlvP->id = resourceid;
+		tlvP->value = NULL;
+		tlvP->length = 0;
+		tlvP->type = type;
+		break;
+	case LUA_TBOOLEAN:
+		tlvP->id = resourceid;
+		tlvP->type = type;
+		int boolean = lua_toboolean(L, -1);
+		if (boolean)
+			tlvP->value = "true";
+		else
+			tlvP->value = "false";
+		tlvP->length = strlen(tlvP->value);
+		break;
+	case LUA_TNUMBER:
+	case LUA_TSTRING:
+		tlvP->id = resourceid;
+		tlvP->value = strdup(lua_tolstring(L, -1, &tlvP->length));
+		tlvP->type = type;
+		if (tlvP->value == NULL) {
+			// Manage memory allocation error
+			return COAP_500_INTERNAL_SERVER_ERROR ;
+		}
+		break;
+	case LUA_TTABLE:
+		if (type == LWM2M_TYPE_RESSOURCE_INSTANCE)
+			return COAP_500_INTERNAL_SERVER_ERROR ;
+
+		// First iteration to get the number of resource instance
+		int size = 0;
+		lua_pushnil(L); // stack: ..., resourceValue, nil
+		while (lua_next(L, -2) != 0) { // stack: ...,resourceValue , key, value
+			if (lua_isnumber(L, -2)) {
+				size++;
+			}
+			// Removes 'value'; keeps 'key' for next iteration
+			lua_pop(L, 1); // stack: ...,resourceValue , key
+		}
+
+		// Second iteration to convert value to tlv
+		lwm2m_tlv_t * subTlvP = lwm2m_tlv_new(size);
+		if (size > 0) {
+			lua_pushnil(L); // stack: ..., resourceValue, nil
+			int i = 0;
+			while (lua_next(L, -2) != 0) { // stack: ...,resourceValue , key, value
+				if (lua_isnumber(L, -2)) {
+					int err = prv_luaToResourceTLV(L, lua_tonumber(L, -2),
+							&subTlvP[i], LWM2M_TYPE_RESSOURCE_INSTANCE);
+					i++;
+					if (err) {
+						lua_pop(L, 2);
+						return err;
+					}
+				}
+				// Removes 'value'; keeps 'key' for next iteration
+				lua_pop(L, 1); // stack: ...,resourceValue , key
+			}
+		}
+
+		// Update Tlv struct
+		tlvP->id = resourceid;
+		tlvP->type = LWM2M_TYPE_MULTIPLE_RESSOURCE;
+		tlvP->value = (uint8_t *) subTlvP;
+		tlvP->length = size;
+		break;
+	default:
+		// Other type is not managed for now.
+		return COAP_501_NOT_IMPLEMENTED ;
+		break;
+	}
+	return COAP_NO_ERROR ;
+}
+
 // Read the resource of the instance on the top of the stack.
 static uint8_t prv_read_resource(lua_State * L, uint16_t resourceid,
 		lwm2m_tlv_t * tlvP) {
@@ -101,24 +182,12 @@ static uint8_t prv_read_resource(lua_State * L, uint16_t resourceid,
 	// Get return code
 	int ret = lua_tointeger(L, -2);
 	if (ret == COAP_205_CONTENT) {
-		if (lua_isnil(L,-1))
-		{
-			tlvP->id = resourceid;
-			tlvP->value = NULL;
-			tlvP->length = 0;
-		}else if (lua_isstring(L,-1))
-		{
-			tlvP->id = resourceid;
-			tlvP->value = strdup(lua_tolstring(L, -1, &tlvP->length));
-			if (tlvP->value == NULL){
-				// manage memory allocation error
-				ret = COAP_500_INTERNAL_SERVER_ERROR;
-			}
-		}else{
-			// other type is not managed for now.
-			ret =  COAP_501_NOT_IMPLEMENTED;
-		}
+		int err = prv_luaToResourceTLV(L, resourceid, tlvP,
+		LWM2M_TYPE_RESSOURCE);
+		if (err)
+			ret = err;
 	}
+
 	// clean the stack
 	lua_pop(L, 2);
 	return ret;
@@ -345,7 +414,6 @@ static uint8_t prv_create(uint16_t instanceId, int numData,
 	memset(instance, 0, sizeof(lwm2m_list_t));
 	instance->id = instanceId;
 	objectP->instanceList = LWM2M_LIST_ADD(objectP->instanceList, instance)
-
 
 	// Push object and instance id on the stack and call the create function
 	lua_pushvalue(L, -2);  // stack: ..., object, createFunc, object

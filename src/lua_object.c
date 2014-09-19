@@ -99,12 +99,16 @@ static int prv_luaToResourceTLV(lua_State * L, uint16_t resourceid,
 		tlvP->type = type;
 		int boolean = lua_toboolean(L, -1);
 		if (boolean)
-			tlvP->value = "true";
+			lwm2m_tlv_encode_int(1,tlvP);
 		else
-			tlvP->value = "false";
-		tlvP->length = strlen(tlvP->value);
+			lwm2m_tlv_encode_int(0,tlvP);
 		break;
 	case LUA_TNUMBER:
+		tlvP->id = resourceid;
+		tlvP->type = type;
+		lua_Number number = lua_tonumber(L,-1);
+		lwm2m_tlv_encode_int(number,tlvP);
+		break;
 	case LUA_TSTRING:
 		tlvP->id = resourceid;
 		tlvP->value = strdup(lua_tolstring(L, -1, &tlvP->length));

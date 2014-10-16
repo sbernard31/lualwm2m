@@ -30,6 +30,10 @@
 #include "lua5.1/lauxlib.h"
 #include "lua5.1/lualib.h"
 
+#define LWM2M_STRING  0x01
+#define LWM2M_NUMBER  0x02
+#define LWM2M_BOOLEAN 0x03
+
 typedef struct luaobject_userdata {
 	lua_State * L;
 	int tableref;
@@ -59,6 +63,34 @@ static int prv_get_instance(lua_State * L, luaobject_userdata * userdata,
 	return 1;
 }
 
+// get the type of the resource of with the given resourceid of
+// the instance on top of the stack
+static int prv_get_type(lua_State * L, uint16_t resourceid) {
+	// Call the list function
+	lua_getfield(L, -1, "type"); // stack: ..., instance, typeFunc
+
+	// type field should be a function
+	if (!lua_isfunction(L, -1)) {
+		lua_pop(L, 1); // clean the stack
+		return 0;
+	}
+
+	// Push instance and resource id on the stack and call the typeFunc
+	lua_pushvalue(L, -2);  // stack: ..., instance, typeFunc, instance
+	lua_pushinteger(L, resourceid);  // stack: ..., instance, typeFunc, resourceid
+	lua_call(L, 2, 1); // stack: ..., instance, type
+
+	if (!lua_isnumber(L, -1)) {
+		lua_pop(L, 1); // clean the stack
+		return -1;
+	}
+
+	int type = lua_tonumber(L,-1);
+	lua_pop(L, 1); // stack: ..., instance
+
+	return type;
+}
+
 // Push a lua list on the stack of all resourceId available for the instance on the stack
 static int prv_get_resourceId_list(lua_State * L) {
 	// Call the list function
@@ -70,7 +102,7 @@ static int prv_get_resourceId_list(lua_State * L) {
 		return 0;
 	}
 
-	// Push instance and resource id on the stack and call the writeFunc
+	// Push instance on the stack and call the listFunc
 	lua_pushvalue(L, -2);  // stack: ..., instance, listFunc, instance
 	lua_call(L, 1, 1); // stack: ..., instance, list
 
@@ -97,7 +129,7 @@ static int prv_luaToResourceTLV(lua_State * L, uint16_t resourceid,
 	case LUA_TBOOLEAN:
 		tlvP->id = resourceid;
 		tlvP->type = type;
-		int boolean = lua_toboolean(L, -1);
+		int64_t boolean = lua_toboolean(L, -1);
 		if (boolean)
 			lwm2m_tlv_encode_int(1,tlvP);
 		else
@@ -106,7 +138,7 @@ static int prv_luaToResourceTLV(lua_State * L, uint16_t resourceid,
 	case LUA_TNUMBER:
 		tlvP->id = resourceid;
 		tlvP->type = type;
-		lua_Number number = lua_tonumber(L,-1);
+		int64_t number = lua_tonumber(L,-1);
 		lwm2m_tlv_encode_int(number,tlvP);
 		break;
 	case LUA_TSTRING:
@@ -267,7 +299,10 @@ static uint8_t prv_read(uint16_t instanceId, int * numDataP,
 // Read the resource of the instance on the top of the stack.
 static uint8_t prv_write_resource(lua_State * L, uint16_t resourceid,
 		lwm2m_tlv_t tlv) {
-
+	stackdump_g(L);
+	// get resource type
+	int type = prv_get_type(L,resourceid);
+	stackdump_g(L);
 	// Get the write function
 	lua_getfield(L, -1, "write"); // stack: ..., instance, writeFunc
 	if (!lua_isfunction(L, -1)) {
@@ -278,7 +313,28 @@ static uint8_t prv_write_resource(lua_State * L, uint16_t resourceid,
 	// Push instance and resource id on the stack and call the writeFunc
 	lua_pushvalue(L, -2);  // stack: ..., instance, writeFunc, instance
 	lua_pushinteger(L, resourceid); // stack: ..., instance, writeFunc, instance, resourceId
-	lua_pushlstring(L, tlv.value, tlv.length); // stack: ..., instance, writeFunc, instance, resourceId, value
+
+	// decode and push value
+	if (type == LWM2M_STRING)
+		lua_pushlstring(L, tlv.value, tlv.length);
+	else{
+		int64_t val = 0;
+		int res = lwm2m_tlv_decode_int(&tlv, &val);
+		if (res != 1){
+			// unable to decode int
+			lua_pop(L,3);
+			return COAP_400_BAD_REQUEST;
+		}
+		if (type == LWM2M_BOOLEAN){
+			lua_pushboolean(L,val);
+		}else if (type == LWM2M_NUMBER){
+			lua_pushinteger(L,val);
+		}else{
+			lua_pop(L,3);
+			return COAP_500_INTERNAL_SERVER_ERROR;
+		}
+	}// stack: ..., instance, writeFunc, instance, resourceId, value
+
 	lua_call(L, 3, 1); // stack: ..., instance, return_code
 
 	// Get return code

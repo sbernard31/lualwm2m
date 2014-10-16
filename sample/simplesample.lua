@@ -18,7 +18,10 @@ local deviceObj = obj.new(3, {
   [1]  = "Lightweight M2M Client",                 -- model number
   [2]  = "345000123",                              -- serial number
   [3]  = "1.0",                                    -- firmware version
-  [13] = {read = function() return os.time() end}, -- current time
+  [13] = {                                         -- current time
+  	read  = function() return os.time() end,
+  	write = function (i,v) print(v) end,
+  	type  = "date"}, 
 })
 
 -- Initialize lwm2m client.

@@ -1,5 +1,5 @@
 local lwm2m = require 'lwm2m'
-local obj = require 'lwm2mobject' 
+local obj = require 'lwm2mobject'
 local socket = require 'socket'
 
 -- Get script arguments.
@@ -17,12 +17,27 @@ local sampleObj = obj.new(3, {
   -- READ
   [0]  = "Res0 : Read only",
   [1]  = {read = function (instance) return "Res2: Read only" end},
-  
+
   -- EXECUTE
   [4]  = {execute = function (instance) print ("Res4: execute !") end},
 
   -- READ/WRITE/EXECUTE
-  [13] = function (instance, mode, value)
+  [13] = {
+    read  = function (instance)
+      local val = instance[15] or 123456
+      print (val); return val;
+    end,
+    write = function (instance, value)
+      print("Res15 modification")
+      print("before :", instance[15]," after:",value)
+      instance[15] = value
+    end,
+    type = "date" -- could be string, number, boolean or date
+  },
+
+  -- READ/WRITE
+  [14] = {read = "default value", write = true},
+  [15] = function (instance, mode, value)
     if mode == "read" then
       return "Res13: Read/Write/Execute, mode=" .. mode
     elseif mode == "write" then
@@ -30,21 +45,7 @@ local sampleObj = obj.new(3, {
     elseif mode == "execute" then
       print ("Res13: Read/Write/Execute, mode=",mode)
     end
-  end,
-
-  -- READ/WRITE
-  [14] = {read = "default value", write = true},
-  [15] = {
-    read  = function (instance)
-      local val = instance[15] or "Res15: defaultvalue"
-      print (val); return val;
-    end,
-    write = function (instance, value)
-      print("Res15 modification")
-      print("before :", instance[15]," after:",value)
-      instance[15] = value
-    end
-  }
+  end
 })
 
 -- Initialize lwm2m client.
@@ -54,7 +55,7 @@ local ll = lwm2m.init("lua-complex-client", {sampleObj},
 -- Add server and register to it.
 local lifetime = 86400  -- Lifetime of the registration in sec or 0 if default value (86400 sec)
 local sms = ""          -- SMS MSISDN (phone number) for this server to send SMS
-local binding = "U"     -- Client connection mode with this server 
+local binding = "U"     -- Client connection mode with this server
 ll:addserver(123, serverip, serverport, lifetime, sms, binding)
 ll:register()
 
@@ -64,5 +65,5 @@ repeat
   local data, ip, port, msg = udp:receivefrom()
   if data then
     ll:handle(data,ip,port)
-  end  
+  end
 until false

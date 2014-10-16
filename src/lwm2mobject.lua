@@ -14,6 +14,11 @@ M.INTERNAL_SERVER_ERROR  = 0xA0
 M.NOT_IMPLEMENTED = 0xA1
 M.SERVICE_UNAVAILABLE = 0xA3
 
+-- LWM2M TYPE
+M.LWM2M_STRING = 0x01
+M.LWM2M_NUMBER = 0x02
+M.LWM2M_BOOLEAN = 0x03
+
 -- LWM2M Read operation
 local function read (instance, resourceid)
   local _mt = getmetatable(instance)
@@ -88,6 +93,55 @@ local function execute (instance, resourceid)
   return M.METHOD_NOT_ALLOWED
 end
 
+-- get the type of resource with the given resourceid
+local function _type (instance, resourceid)
+  local _mt = getmetatable(instance)
+  local operations = _mt.object.operations
+
+  local op = operations[resourceid]
+  local optype = type(op)
+
+  if optype == "table" then
+    if type(op.type) == "string" then
+      -- use the field type to know the type
+      if op.type == "number" or op.type == "date" then
+        return M.LWM2M_NUMBER
+      elseif op.type == "boolean" then
+        return M.LWM2M_BOOLEAN
+      elseif op.type == "string" then
+        return M.LWM2M_STRING
+      end
+    elseif type(op.write) == "string" then
+      -- use the field type to know the type
+      if op.write == "number" or op.type == "date" then
+        return M.LWM2M_NUMBER
+      elseif op.write == "boolean" then
+        return M.LWM2M_BOOLEAN
+      elseif op.write == "string" then
+        return M.LWM2M_STRING
+      end
+    elseif op.read then
+      -- use the type of read field
+      if type(op.read) == "number" then
+        return M.LWM2M_NUMBER
+      elseif type(op.read) == "boolean" then
+        return M.LWM2M_BOOLEAN
+      elseif type(op.read) == "string" then
+        return M.LWM2M_STRING
+      end
+    end
+  elseif optype == "number" then
+    return M.LWM2M_NUMBER
+  elseif optype == "boolean" then
+    return M.LWM2M_BOOLEAN
+  elseif optype == "string" then
+    return M.LWM2M_STRING
+  end
+  
+  -- default type is "string"
+  return M.LWM2M_STRING
+end
+
 -- LWM2M delete operation
 local function delete (instance)
   local _mt = getmetatable(instance)
@@ -97,9 +151,9 @@ local function delete (instance)
     obj[instance.id]  = nil
     return M.DELETED
   end
-  
+
   -- if no delete information for this object
-  -- default behavior is to : 
+  -- default behavior is to :
   -- delete is llowed for multiinstance and forbidden for single one.
   if obj.multi then
     obj[instance.id] = nil
@@ -134,7 +188,7 @@ function M.new(id, operations, multi)
       obj[id] = instance
       setmetatable(instance,{
         object     = obj,
-        __index    = {read = read, write = write, execute = execute, list = list, delete = delete},
+        __index    = {read = read, write = write, execute = execute, list = list, delete = delete, type = _type},
       })
       return instance
     end,
@@ -142,7 +196,7 @@ function M.new(id, operations, multi)
     create = function (obj,id)
       if multi and not obj[id] then
         local instance = obj:newinstance(id)
-        return M.CREATED, instance 
+        return M.CREATED, instance
       else
         return M.METHOD_NOT_ALLOWED
       end

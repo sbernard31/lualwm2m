@@ -14,16 +14,16 @@ udp:setsockname('*', deviceport)
 
 -- Define an custom object to manage temperature in rooms.
 local rooms = obj.new(21, {
-  [0]  = {read = function () return math.random(16,30) end},  -- Current Temperature
-  [1]  = {read = true, write=true},                           -- Temperature set-point
+  [0]  = {read = function () return tostring(math.random(16,30)) end}, -- Current Temperature
+  [1]  = {read = true, write=true, type="string"},                     -- Temperature set-point
 },true)
 
 -- Create instances.
 local bedroom = rooms:newinstance(0);
-bedroom[1] = 16;   -- bedroom temperature set point
+bedroom[1] = "16";   -- bedroom temperature set point
 
 local livingroom = rooms:newinstance(1);
-livingroom[1] = 18;   -- livingroom temperature set point
+livingroom[1] = "18";   -- livingroom temperature set point
 
 
 -- Initialize lwm2m client.

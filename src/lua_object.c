@@ -299,10 +299,8 @@ static uint8_t prv_read(uint16_t instanceId, int * numDataP,
 // Read the resource of the instance on the top of the stack.
 static uint8_t prv_write_resource(lua_State * L, uint16_t resourceid,
 		lwm2m_tlv_t tlv) {
-	stackdump_g(L);
 	// get resource type
 	int type = prv_get_type(L,resourceid);
-	stackdump_g(L);
 	// Get the write function
 	lua_getfield(L, -1, "write"); // stack: ..., instance, writeFunc
 	if (!lua_isfunction(L, -1)) {

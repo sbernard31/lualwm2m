@@ -33,6 +33,8 @@ local function read (instance, resourceid)
     return M.CONTENT, op
   elseif optype == "number" then
     return M.CONTENT, op
+  elseif optype == "boolean" then
+    return M.CONTENT, op
   elseif optype == "function" then
     return M.CONTENT, op(instance,"read")
   elseif optype == "table" then

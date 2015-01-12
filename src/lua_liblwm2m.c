@@ -1,24 +1,24 @@
 /*
-MIT License (MIT)
+ MIT License (MIT)
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights
+ to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ copies of the Software, and to permit persons to whom the Software is
+ furnished to do so, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
-*/
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE SOFTWARE.
+ */
 
 #include "lua5.1/lua.h"
 #include "lua5.1/lauxlib.h"
@@ -27,7 +27,6 @@ THE SOFTWARE.
 #include "liblwm2m.h"
 #include <string.h>
 #include <stdlib.h>
-
 
 extern lwm2m_object_t * get_lua_object(lua_State *L, int tableindex, int objId);
 
@@ -67,6 +66,7 @@ typedef struct llwm_userdata {
 	lua_State * L;
 	lwm2m_context_t * ctx;
 	int sendCallbackRef;
+	int connectServerCallbackRef;
 } llwm_userdata;
 
 static llwm_userdata * checkllwm(lua_State * L, const char * functionname) {
@@ -80,7 +80,8 @@ static llwm_userdata * checkllwm(lua_State * L, const char * functionname) {
 	return lwu;
 }
 
-static uint8_t prv_buffer_send_callback(void * sessionH, uint8_t * buffer, size_t length, void * userData) {
+static uint8_t prv_buffer_send_callback(void * sessionH, uint8_t * buffer,
+		size_t length, void * userData) {
 
 	llwm_userdata * ud = userData;
 	lua_State * L = ud->L;
@@ -93,6 +94,29 @@ static uint8_t prv_buffer_send_callback(void * sessionH, uint8_t * buffer, size_
 	lua_call(L, 3, 0);
 
 	return COAP_NO_ERROR ;
+}
+
+static void * prv_connect_server_callback(uint16_t serverID, void * userData) {
+	llwm_userdata * ud = userData;
+	lua_State * L = ud->L;
+
+	lua_rawgeti(L, LUA_REGISTRYINDEX, ud->connectServerCallbackRef);
+	lua_pushnumber(L, serverID);
+	lua_call(L, 1, 2);
+
+	// Get server address.
+	char* host = lua_tostring(L, -2);
+	int port = lua_tonumber(L, -1);
+	lua_pop(L, 2); // clean the stack
+
+	size_t lal = sizeof(struct llwm_addr_t);
+	struct llwm_addr_t * la = malloc(lal);
+	if (la == NULL)
+		luaL_error(L, "Memory allocation problem when 'prv_connect_server_callback'");
+	la->host = strdup(host);
+	la->port = port;
+
+	return la;
 }
 
 static int llwm_init(lua_State *L) {
@@ -109,17 +133,22 @@ static int llwm_init(lua_State *L) {
 	// 3rd parameter : should be a callback.
 	luaL_checktype(L, 3, LUA_TFUNCTION);
 
+	// 4rd parameter : should be a callback.
+	luaL_checktype(L, 4, LUA_TFUNCTION);
+
 	// Create llwm userdata object and set its metatable.
-	llwm_userdata * lwu = lua_newuserdata(L, sizeof(llwm_userdata)); // stack: endpoint, tableobj, sendcallback, lwu
+	llwm_userdata * lwu = lua_newuserdata(L, sizeof(llwm_userdata)); // stack: endpoint, tableobj, connectcallback, sendcallback, lwu
 	lwu->L = L;
 	lwu->sendCallbackRef = LUA_NOREF;
+	lwu->connectServerCallbackRef = LUA_NOREF;
 	lwu->ctx = NULL;
-	luaL_getmetatable(L, "lualwm2m.llwm"); // stack: endpoint, tableobj, sendcallback, lwu, metatable
-	lua_setmetatable(L, -2); // stack: endpoint, tableobj, sendcallback, lwu
-	lua_replace(L, 1); // stack: lwu, tableobj, sendcallback
+	luaL_getmetatable(L, "lualwm2m.llwm"); // stack: endpoint, tableobj, connectcallback, sendcallback, lwu, metatable
+	lua_setmetatable(L, -2); // stack: endpoint, tableobj, connectcallback, sendcallback, lwu
+	lua_replace(L, 1); // stack: lwu, tableobj, connectcallback, sendcallback
 
-	// Store the callback in Lua registry to keep a reference on it.
-	int callbackref = luaL_ref(L, LUA_REGISTRYINDEX); // stack: lwu, tableobj
+	// Store callbacks in Lua registry to keep a reference on it.
+	int sendCallbackRef = luaL_ref(L, LUA_REGISTRYINDEX); // stack: lwu, tableobj, connectcallback
+	int connectServerCallbackRef = luaL_ref(L, LUA_REGISTRYINDEX); // stack: lwu, tableobj
 
 	// Manage "lwm2m objects" list :
 	// For each object in "lwm2m objects" list, create a "C lwm2m object".
@@ -157,89 +186,27 @@ static int llwm_init(lua_State *L) {
 	lua_pop(L, 1); // stack: lwu
 
 	// Context Initialization.
-	lwm2m_context_t * contextP = lwm2m_init(endpointName, objListLen,
-			objArray, prv_buffer_send_callback, lwu);
+	lwm2m_context_t * contextP = lwm2m_init(prv_connect_server_callback,
+			prv_buffer_send_callback, lwu);
 	lwu->ctx = contextP;
-	lwu->sendCallbackRef = callbackref;
+	lwu->sendCallbackRef = sendCallbackRef;
+	lwu->connectServerCallbackRef = connectServerCallbackRef;
 
+	int res =  lwm2m_configure(contextP, endpointName, BINDING_U, NULL, objListLen,
+			objArray);
+	if (res != COAP_NO_ERROR){
+		luaL_error(L,
+			"unable to initialize lwM2m context : configure failed (Bad object structure or memory allocation problem ?)");
+	}
 	return 1;
 }
 
-static int llwm_add_server(lua_State *L) {
+static int llwm_start(lua_State *L) {
 	// Get llwm userdata.
-	llwm_userdata * lwu = checkllwm(L, "addserver");
+	llwm_userdata * lwu = checkllwm(L, "start");
 
-	// Get server short ID.
-	uint16_t shortID = luaL_checknumber(L, 2);
-
-	// Get server address.
-	char* host = luaL_checkstring(L, 3);
-	int port = luaL_checkint(L, 4);
-
-	// Get lifetime for registration
-	int lifetime = luaL_optint(L, 5, 0);
-
-	// SMS number of NULL
-	char * sms = luaL_optstring(L, 6, "");
-
-	// on empty string the SMS number is null
-	if (strlen(sms) <= 0) {
-		sms = NULL;
-	}
-	// binding mode
-	char * strBinding = luaL_optstring(L, 7, "U");
-	lwm2m_binding_t binding = BINDING_UNKNOWN;
-
-	if (strcmp(strBinding,"U") == 0) {
-		binding = BINDING_U;
-	} else if (strcmp(strBinding,"UQ") == 0) {
-		binding = BINDING_UQ;
-	} else if (strcmp(strBinding,"S") == 0) {
-		binding = BINDING_S;
-	} else if (strcmp(strBinding,"SQ") == 0) {
-		binding = BINDING_SQ;
-	} else if (strcmp(strBinding,"US") == 0) {
-		binding = BINDING_US;
-	} else if (strcmp(strBinding,"UQS") == 0) {
-		binding = BINDING_UQS;
-	} else {
-		return luaL_error(L,
-			"unknown binding mode");
-	}
-
-	// Create struct to store it.
-	size_t lal = sizeof(struct llwm_addr_t);
-	struct llwm_addr_t * la = malloc(lal);
-	if (la == NULL)
-		return luaL_error(L, "Memory allocation problem when 'addserver'");
-	la->host = strdup(host);
-	la->port = port;
-
-	// We do not manage security for now.
-	lwm2m_security_t security;
-	memset(&security, 0, sizeof(lwm2m_security_t));
-
-	// Add server to context.
-	int error = lwm2m_add_server(lwu->ctx, shortID, lifetime, sms, binding, la, &security);
-
-	// Free adress struct memory.
-	//free(la->host); // TODO we cannot free it because it is already used, problem this will never be free...
-	//free(la);
-
-	// Manage error.
-	if (error)
-		return luaL_error(L, "unable to add server (uid=%d,url=%s,port=%d)",
-				shortID, host, port);
-
-	return 0;
-}
-
-static int llwm_register(lua_State *L) {
-	// Get llwm userdata.
-	llwm_userdata * lwu = checkllwm(L, "register");
-
-	// Register it to servers.
-	lwm2m_register(lwu->ctx);
+	// Start connection
+	lwm2m_start(lwu->ctx);
 
 	return 0;
 }
@@ -305,9 +272,9 @@ static int llwm_resource_changed(lua_State *L) {
 	// Create URI of resource which changed.
 	lwm2m_uri_t uri;
 	int result = lwm2m_stringToUri(uriPath, length, &uri);
-	if (result == 0){
+	if (result == 0) {
 		lua_pushnil(L);
-		lua_pushstring(L,"resource uri syntax error");
+		lua_pushstring(L, "resource uri syntax error");
 		return 2;
 	}
 
@@ -319,17 +286,19 @@ static int llwm_resource_changed(lua_State *L) {
 static int llwm_close(lua_State *L) {
 	// Get llwm userdata
 	llwm_userdata* lwu = (llwm_userdata*) luaL_checkudata(L, 1,
-				"lualwm2m.llwm");
+			"lualwm2m.llwm");
 
 	// Close lwm2m context.
 	if (lwu->ctx) {
 		lwm2m_close(lwu->ctx);
-		lwu->ctx->bufferSendUserData = NULL;
+		lwu->ctx->userData = NULL;
 	}
 
-	// Release "send" callback.
+	// Release callbacks.
 	luaL_unref(L, LUA_REGISTRYINDEX, lwu->sendCallbackRef);
 	lwu->sendCallbackRef = LUA_NOREF;
+	luaL_unref(L, LUA_REGISTRYINDEX, lwu->connectServerCallbackRef);
+	lwu->connectServerCallbackRef = LUA_NOREF;
 
 	lwu->ctx = NULL;
 
@@ -337,9 +306,8 @@ static int llwm_close(lua_State *L) {
 }
 
 static const struct luaL_Reg llwm_objmeths[] = { { "handle", llwm_handle }, {
-		"addserver", llwm_add_server }, { "register", llwm_register }, {
-		"close", llwm_close }, { "step", llwm_step }, { "resourcechanged",
-		llwm_resource_changed }, { "__gc", llwm_close }, {
+		"start", llwm_start }, { "close", llwm_close }, { "step", llwm_step }, {
+		"resourcechanged", llwm_resource_changed }, { "__gc", llwm_close }, {
 NULL, NULL } };
 
 static const struct luaL_Reg llwm_modulefuncs[] = { { "init", llwm_init }, {

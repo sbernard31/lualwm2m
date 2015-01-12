@@ -12,6 +12,18 @@ local deviceport = args[3] or 5682
 local udp = socket.udp();
 udp:setsockname('*', deviceport)
 
+-- Define mandatory objects (used for connection)
+local securityObj = obj.new(0, {
+  [0]  = "coap://"..serverport..":"..serverport,   -- serverURI
+  [1]  = false,                                    -- true if it's a bootstrap server
+  [10] = 123,                                      -- short server ID
+  [11] = 0,                                        -- client hold off time (revelant only for bootstrap server)
+})
+local serverObj = obj.new(1, {
+  [0]  = 123,                                      -- short server ID
+  [1]  = 3600,                                        -- lifetime
+  [7]  = "U",                                      -- binding
+})
 -- Define a sample object.
 local sampleObj = obj.new(3, {
   -- READ
@@ -49,17 +61,12 @@ local sampleObj = obj.new(3, {
 })
 
 -- Initialize lwm2m client.
-local ll = lwm2m.init("lua-complex-client", {sampleObj},
+local ll = lwm2m.init("lua-complex-client", {securityObj,serverObj,sampleObj},
+  function(serverid) return serverip,serverport end,
   function(data,host,port) udp:sendto(data,host,port) end)
 
--- Add server and register to it.
-local lifetime = 86400  -- Lifetime of the registration in sec or 0 if default value (86400 sec)
-local sms = ""          -- SMS MSISDN (phone number) for this server to send SMS
-local binding = "U"     -- Client connection mode with this server
-ll:addserver(123, serverip, serverport, lifetime, sms, binding)
-ll:register()
-
 -- Communicate ...
+ll:start()
 repeat
   ll:step()
   local data, ip, port, msg = udp:receivefrom()

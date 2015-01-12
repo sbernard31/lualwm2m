@@ -16,7 +16,18 @@ udp:setsockname('*', deviceport)
 -- Secure the socket.
 dtls.wrap(udp, {security = "PSK", identity = "Client_identity", key = dtls.hex2bin("73656372657450534b")})
 
--- Define a device object.
+-- Define mandatory objects (used for connection)
+local securityObj = obj.new(0, {
+  [0]  = "coap://"..serverport..":"..serverport,   -- serverURI
+  [1]  = false,                                    -- true if it's a bootstrap server
+  [10] = 123,                                      -- short server ID
+  [11] = 0,                                        -- client hold off time (revelant only for bootstrap server)
+})
+local serverObj = obj.new(1, {
+  [0]  = 123,                                      -- short server ID
+  [1]  = 3600,                                        -- lifetime
+  [7]  = "U",                                      -- binding
+})
 local deviceObj = obj.new(3, {
   [0]  = "Open Mobile Alliance",                   -- manufacturer
   [1]  = "Lightweight M2M Client",                 -- model number
@@ -26,14 +37,12 @@ local deviceObj = obj.new(3, {
 })
 
 -- Initialize lwm2m client.
-local ll = lwm2m.init("lua-dtlspsk-client", {deviceObj},
+local ll = lwm2m.init("lua-dtlspsk-client", {securityObj, serverObj, deviceObj},
+  function(serverid) return serverip,serverport end,
   function(data,host,port) udp:sendto(data,host,port) end)
 
--- Add server and register to it.
-ll:addserver(123, serverip, serverport)
-ll:register()
-
 -- Communicate ...
+ll:start()
 repeat
   ll:step()
   local data, ip, port, msg = udp:receivefrom()

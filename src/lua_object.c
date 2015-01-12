@@ -286,8 +286,12 @@ static uint8_t prv_read(uint16_t instanceId, int * numDataP,
 		return COAP_205_CONTENT ;
 	} else {
 		// Get resource.
-		(*numDataP) = 1;
-		int ret = prv_read_resource(L, (*dataArrayP)->id, (*dataArrayP));
+		int ret;
+		int i = 0;
+		do{
+			ret = prv_read_resource(L, ((*dataArrayP)+i)->id, (*dataArrayP)+i);
+			i++;
+		}while (i < *numDataP && ret == COAP_205_CONTENT);
 		lua_pop(L, 1);
 		return ret;
 	}

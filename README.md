@@ -10,23 +10,46 @@ local lwm2m = require 'lwm2m'
 local socket = require 'socket'
 local obj = require 'lwm2mobject'
 
-local udp = socket.udp();
-udp:setsockname('*', 5682)
+-- Get script arguments.
+local args = {...}
+local serverip = args[1] or "127.0.0.1"
+local serverport = args[2] or 5683
+local deviceport = args[3] or 5682
 
+-- Create UDP socket.
+local udp = socket.udp();
+udp:setsockname('*', deviceport)
+
+-- Define mandatory objects (used for connection)
+local securityObj = obj.new(0, {
+  [0]  = "coap://"..serverport..":"..serverport,-- serverURI
+  [1]  = false,                                 -- true if it's a bootstrap server
+  [10] = 123,                                   -- short server ID
+  [11] = 0,                                     -- client hold off time (revelant only for bootstrap server)
+})
+local serverObj = obj.new(1, {
+  [0] = 123,                                    -- short server ID
+  [1] = 3600,                                   -- lifetime
+  [7] = "U",                                    -- binding
+})
 local deviceObj = obj.new(3, {
-  [0]  = "Open Mobile Alliance",                   -- manufacturer
-  [1]  = "Lightweight M2M Client",                 -- model number
-  [2]  = "345000123",                              -- serial number
-  [3]  = "1.0",                                    -- firmware version
-  [13] = {read = function() return os.time() end}, -- current time
+  [0]  = "Open Mobile Alliance",                -- manufacturer
+  [1]  = "Lightweight M2M Client",              -- model number
+  [2]  = "345000123",                           -- serial number
+  [3]  = "1.0",                                 -- firmware version
+  [13] = {                                      -- current time
+    read = function() return os.time() end,
+    write = function (i,v) print(v) end,
+    type = "date"},
 })
 
-local ll = lwm2m.init("testlualwm2mclient", {deviceObj},
+-- Initialize lwm2m client.
+local ll = lwm2m.init("lua-client", {securityObj,serverObj,deviceObj},
+  function(serverid) return serverip,serverport end,
   function(data,host,port) udp:sendto(data,host,port) end)
 
-ll:addserver(123, "127.0.0.1", 5683)
-ll:register()
-
+-- Communicate ...
+ll:start()
 repeat
   ll:step()
   local data, ip, port, msg = udp:receivefrom()
@@ -61,9 +84,6 @@ lua simplesample.lua [serverip] [serverport] [deviceport]
 ```
 You can test it with [leshan](https://github.com/jvermillard/leshan).
 Go to http://54.228.25.31 and run `lua simplesample.lua 54.228.25.31`
-
-If you don't want to compile it and you're familiar with [docker](https://www.docker.com/), you could try this [docker container](https://github.com/jvermillard/containers/tree/master/lualwm2m).
-
 
 Limitation
 ----------

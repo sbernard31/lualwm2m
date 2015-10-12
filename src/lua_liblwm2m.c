@@ -192,7 +192,7 @@ static int llwm_init(lua_State *L) {
 	lwu->sendCallbackRef = sendCallbackRef;
 	lwu->connectServerCallbackRef = connectServerCallbackRef;
 
-	int res =  lwm2m_configure(contextP, endpointName, BINDING_U, NULL, objListLen,
+	int res =  lwm2m_configure(contextP, endpointName, NULL, NULL, objListLen,
 			objArray);
 	if (res != COAP_NO_ERROR){
 		luaL_error(L,
@@ -256,7 +256,7 @@ static int llwm_step(lua_State *L) {
 	struct timeval tv;
 	tv.tv_sec = 60;
 	tv.tv_usec = 0;
-	lwm2m_step(lwu->ctx, &tv);
+	lwm2m_step(lwu->ctx, &(tv.tv_sec));
 
 	return 0;
 }

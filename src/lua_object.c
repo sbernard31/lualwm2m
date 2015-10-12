@@ -114,44 +114,44 @@ static int prv_get_resourceId_list(lua_State * L) {
 	return 1;
 }
 
-// Convert the resource from the top of the stack in tlvP
+// Convert the resource from the top of the stack in dataP
 // return 0 (COAP_NO_ERROR) if ok or COAP error if an error occurred (see liblwm2m.h)
-static int prv_luaToResourceTLV(lua_State * L, uint16_t resourceid,
-		lwm2m_tlv_t * tlvP, lwm2m_tlv_type_t type) {
+static int prv_luaToResourceData(lua_State * L, uint16_t resourceid,
+		lwm2m_data_t * dataP, lwm2m_data_type_t type) {
 	int value_type = lua_type(L, -1);
 	switch (value_type) {
 	case LUA_TNIL:
-		tlvP->id = resourceid;
-		tlvP->value = NULL;
-		tlvP->length = 0;
-		tlvP->type = type;
+		dataP->id = resourceid;
+		dataP->value = NULL;
+		dataP->length = 0;
+		dataP->type = type;
 		break;
 	case LUA_TBOOLEAN:
-		tlvP->id = resourceid;
-		tlvP->type = type;
+		dataP->id = resourceid;
+		dataP->type = type;
 		int64_t boolean = lua_toboolean(L, -1);
 		if (boolean)
-			lwm2m_tlv_encode_int(1,tlvP);
+			lwm2m_data_encode_int(1,dataP);
 		else
-			lwm2m_tlv_encode_int(0,tlvP);
+			lwm2m_data_encode_int(0,dataP);
 		break;
 	case LUA_TNUMBER:
-		tlvP->id = resourceid;
-		tlvP->type = type;
+		dataP->id = resourceid;
+		dataP->type = type;
 		int64_t number = lua_tonumber(L,-1);
-		lwm2m_tlv_encode_int(number,tlvP);
+		lwm2m_data_encode_int(number,dataP);
 		break;
 	case LUA_TSTRING:
-		tlvP->id = resourceid;
-		tlvP->value = strdup(lua_tolstring(L, -1, &tlvP->length));
-		tlvP->type = type;
-		if (tlvP->value == NULL) {
+		dataP->id = resourceid;
+		dataP->value = strdup(lua_tolstring(L, -1, &dataP->length));
+		dataP->type = type;
+		if (dataP->value == NULL) {
 			// Manage memory allocation error
 			return COAP_500_INTERNAL_SERVER_ERROR ;
 		}
 		break;
 	case LUA_TTABLE:
-		if (type == LWM2M_TYPE_RESSOURCE_INSTANCE)
+		if (type == LWM2M_TYPE_RESOURCE_INSTANCE)
 			return COAP_500_INTERNAL_SERVER_ERROR ;
 
 		// First iteration to get the number of resource instance
@@ -165,15 +165,15 @@ static int prv_luaToResourceTLV(lua_State * L, uint16_t resourceid,
 			lua_pop(L, 1); // stack: ...,resourceValue , key
 		}
 
-		// Second iteration to convert value to tlv
-		lwm2m_tlv_t * subTlvP = lwm2m_tlv_new(size);
+		// Second iteration to convert value to data
+		lwm2m_data_t * subdataP = lwm2m_data_new(size);
 		if (size > 0) {
 			lua_pushnil(L); // stack: ..., resourceValue, nil
 			int i = 0;
 			while (lua_next(L, -2) != 0) { // stack: ...,resourceValue , key, value
 				if (lua_isnumber(L, -2)) {
-					int err = prv_luaToResourceTLV(L, lua_tonumber(L, -2),
-							&subTlvP[i], LWM2M_TYPE_RESSOURCE_INSTANCE);
+					int err = prv_luaToResourceData(L, lua_tonumber(L, -2),
+							&subdataP[i], LWM2M_TYPE_RESOURCE_INSTANCE);
 					i++;
 					if (err) {
 						lua_pop(L, 2);
@@ -185,11 +185,11 @@ static int prv_luaToResourceTLV(lua_State * L, uint16_t resourceid,
 			}
 		}
 
-		// Update Tlv struct
-		tlvP->id = resourceid;
-		tlvP->type = LWM2M_TYPE_MULTIPLE_RESSOURCE;
-		tlvP->value = (uint8_t *) subTlvP;
-		tlvP->length = size;
+		// Update Data struct
+		dataP->id = resourceid;
+		dataP->type = LWM2M_TYPE_MULTIPLE_RESOURCE;
+		dataP->value = (uint8_t *) subdataP;
+		dataP->length = size;
 		break;
 	default:
 		// Other type is not managed for now.
@@ -201,7 +201,7 @@ static int prv_luaToResourceTLV(lua_State * L, uint16_t resourceid,
 
 // Read the resource of the instance on the top of the stack.
 static uint8_t prv_read_resource(lua_State * L, uint16_t resourceid,
-		lwm2m_tlv_t * tlvP) {
+		lwm2m_data_t * dataP) {
 
 	// Get the read function
 	lua_getfield(L, -1, "read"); // stack: ..., instance, readFunc
@@ -218,8 +218,8 @@ static uint8_t prv_read_resource(lua_State * L, uint16_t resourceid,
 	// Get return code
 	int ret = lua_tointeger(L, -2);
 	if (ret == COAP_205_CONTENT) {
-		int err = prv_luaToResourceTLV(L, resourceid, tlvP,
-		LWM2M_TYPE_RESSOURCE);
+		int err = prv_luaToResourceData(L, resourceid, dataP,
+		LWM2M_TYPE_RESOURCE);
 		if (err)
 			ret = err;
 	}
@@ -230,7 +230,7 @@ static uint8_t prv_read_resource(lua_State * L, uint16_t resourceid,
 }
 
 static uint8_t prv_read(uint16_t instanceId, int * numDataP,
-		lwm2m_tlv_t ** dataArrayP, lwm2m_object_t * objectP) {
+		lwm2m_data_t ** dataArrayP, lwm2m_object_t * objectP) {
 
 	// Get user data.
 	luaobject_userdata * userdata = (luaobject_userdata*) objectP->userData;
@@ -253,8 +253,8 @@ static uint8_t prv_read(uint16_t instanceId, int * numDataP,
 		size_t nbRes = lua_objlen(L, -1);
 
 		// Create temporary structure
-		lwm2m_tlv_t tmpDataArray[nbRes];
-		memset(tmpDataArray, 0, nbRes * sizeof(lwm2m_tlv_t));
+		lwm2m_data_t tmpDataArray[nbRes];
+		memset(tmpDataArray, 0, nbRes * sizeof(lwm2m_data_t));
 
 		// Iterate through all items of the resourceId list
 		int i = 0;
@@ -275,13 +275,13 @@ static uint8_t prv_read(uint16_t instanceId, int * numDataP,
 		lua_pop(L, 2);
 
 		// Allocate memory for this resource
-		*dataArrayP = lwm2m_tlv_new(i);
+		*dataArrayP = lwm2m_data_new(i);
 		if (*dataArrayP == NULL)
 			return COAP_500_INTERNAL_SERVER_ERROR ;
 
 		// Copy data in output parameter
 		(*numDataP) = i;
-		memcpy(*dataArrayP, tmpDataArray, sizeof(lwm2m_tlv_t) * i);
+		memcpy(*dataArrayP, tmpDataArray, sizeof(lwm2m_data_t) * i);
 
 		return COAP_205_CONTENT ;
 	} else {
@@ -302,7 +302,7 @@ static uint8_t prv_read(uint16_t instanceId, int * numDataP,
 
 // Read the resource of the instance on the top of the stack.
 static uint8_t prv_write_resource(lua_State * L, uint16_t resourceid,
-		lwm2m_tlv_t tlv) {
+		lwm2m_data_t data) {
 	// get resource type
 	int type = prv_get_type(L,resourceid);
 	// Get the write function
@@ -318,10 +318,10 @@ static uint8_t prv_write_resource(lua_State * L, uint16_t resourceid,
 
 	// decode and push value
 	if (type == LWM2M_STRING)
-		lua_pushlstring(L, tlv.value, tlv.length);
+		lua_pushlstring(L, data.value, data.length);
 	else{
 		int64_t val = 0;
-		int res = lwm2m_tlv_decode_int(&tlv, &val);
+		int res = lwm2m_data_decode_int(&data, &val);
 		if (res != 1){
 			// unable to decode int
 			lua_pop(L,3);
@@ -348,7 +348,7 @@ static uint8_t prv_write_resource(lua_State * L, uint16_t resourceid,
 }
 
 static uint8_t prv_write(uint16_t instanceId, int numData,
-		lwm2m_tlv_t * dataArray, lwm2m_object_t * objectP) {
+		lwm2m_data_t * dataArray, lwm2m_object_t * objectP) {
 	// Get user data.
 	luaobject_userdata * userdata = (luaobject_userdata*) objectP->userData;
 	lua_State * L = userdata->L;
@@ -391,7 +391,7 @@ static uint8_t prv_execute_resource(lua_State * L, uint16_t resourceid) {
 }
 
 static uint8_t prv_execute(uint16_t instanceId, uint16_t resourceId,
-		char * buffer, int length, lwm2m_object_t * objectP) {
+        uint8_t * buffer, int length, lwm2m_object_t * objectP) {
 	// Get user data.
 	luaobject_userdata * userdata = (luaobject_userdata*) objectP->userData;
 	lua_State * L = userdata->L;
@@ -454,7 +454,7 @@ static uint8_t prv_delete(uint16_t id, lwm2m_object_t * objectP) {
 }
 
 static uint8_t prv_create(uint16_t instanceId, int numData,
-		lwm2m_tlv_t * dataArray, lwm2m_object_t * objectP) {
+		lwm2m_data_t * dataArray, lwm2m_object_t * objectP) {
 	// Get user data.
 	luaobject_userdata * userdata = (luaobject_userdata*) objectP->userData;
 	lua_State * L = userdata->L;

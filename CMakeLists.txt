@@ -6,6 +6,7 @@ SET(LIBLWM2M_DIR ${CMAKE_CURRENT_LIST_DIR}/liblwm2m/core)
 
 set(CMAKE_BUILD_TYPE Debug)
 add_definitions(-DLWM2M_CLIENT_MODE)
+add_definitions(-DLWM2M_LITTLE_ENDIAN)
 
 include_directories (${LIBLWM2M_DIR} ${CMAKE_CURRENT_LIST_DIR}/utils)
 add_subdirectory(${LIBLWM2M_DIR} ${CMAKE_CURRENT_BINARY_DIR}/core)
